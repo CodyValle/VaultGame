@@ -8,17 +8,21 @@ public class CharacterSpt : MonoBehaviour
 	[Header("Player Stats")]
 	
 	[Tooltip("The power of each jump.")]
-	public float jumpForce = 5;   // Upward force of the jump
+	public float jumpForce = 5;    // Upward force of the jump
 	[Tooltip("The speed the player moves.")]
-	public float speed = 2;		  // Horizontal motion of the character
+	public float speed = 2;		   // Horizontal motion of the character
 	[Tooltip("The speed the player slides down a wall.")]
-	public float slideSpeed = 2;		  // Vertical motion of the character
+	public float slideSpeed = 2;   // Vertical motion of the character
 	
-	private bool doJump = false;  // Has the player triggered a jump?
-	private bool onFloor = false; // Is the player on the floor?
-	private bool onWall = false;  // Is the player clinging to a wall?
-	private int  direction = 1;   // Direction the character is moving
-	private Rigidbody2D rBody;    // Reference to the rigid body
+	private bool doJump = false;   // Has the player triggered a jump?
+	private bool onFloor = false;  // Is the player on the floor?
+	private bool onWall = false;   // Is the player clinging to a wall?
+	private int  direction = 1;    // Direction the character is moving
+	private bool doShoot = false;  // Should the character start shooting?
+	private bool shooting = false; // Is the character currently shooting?
+	private Vector3 aimDirection;  // The direction the character is shooting
+	private Vector2 touchLocation;  // Helper for the direction the character is shooting
+	private Rigidbody2D rBody;     // Reference to the rigid body
 
 	void Start()
 	{
@@ -29,7 +33,59 @@ public class CharacterSpt : MonoBehaviour
 	void Update()
 	{
 		// Look for input to trigger a jump
-		if (Input.anyKeyDown && (onFloor || onWall)) doJump = true;
+		if (Input.GetButtonDown("Jump"))
+		{
+			if (onFloor || onWall)
+				doJump = true;
+		}
+		if (Input.touchCount > 0)
+		{
+			// Needs optimisation: for (Touch t: Input.touches)
+			for (int i = 0; i < Input.touches.Length; i++)
+			{
+				if (Util.LeftSideOfScreen(Input.GetTouch(i).position) && Input.GetTouch(i).phase == TouchPhase.Began)
+				{
+					if (onFloor || onWall)
+						doJump = true;
+				}
+
+				// If there is a touch on the right side of the screen...
+				if (Util.RightSideOfScreen(Input.GetTouch(i).position))
+				{
+					// ...shoot stuff
+					
+					// Optimisation: use switch
+					if (Input.GetTouch(i).phase == TouchPhase.Began)
+					{
+						touchLocation = Input.GetTouch(i).position;
+					}
+					
+					if (Input.GetTouch(i).phase == TouchPhase.Moved)
+					{
+						doShoot = true;
+						aimDirection = -(touchLocation - Input.GetTouch(i).position).normalized;
+					}
+
+					if (Input.GetTouch(i).phase == TouchPhase.Ended)
+					{
+						doShoot = false;
+					}
+				}
+			}
+		}
+
+		// Start shooting if the character isn't, but should
+		if (doShoot && !shooting)
+		{
+			shooting = true;
+			InvokeRepeating("Shoot", 0, 0.2f);
+		}
+		// Stop shooting if the character is and shouldn't
+		else if (!doShoot && shooting)
+		{
+			shooting = false;
+			CancelInvoke("Shoot");
+		}
 		
 		// The character is constantly moving
 		rBody.velocity = new Vector2(speed * direction, rBody.velocity.y);
@@ -54,6 +110,14 @@ public class CharacterSpt : MonoBehaviour
 			// Add the jump force to the rigidbody
 			rBody.AddForce(transform.up * jumpForce * 1000);
 		}
+	}
+
+	// Shoots the bullets
+	private void Shoot()
+	{
+		GameObject b = BulletPoolerSpt.Instance.getBullet();
+		b.transform.position = transform.position;
+		b.transform.rotation = Quaternion.FromToRotation(Vector3.up, aimDirection);
 	}
 
 	void OnTriggerEnter2D(Collider2D col)
